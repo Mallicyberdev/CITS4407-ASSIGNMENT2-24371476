@@ -11,6 +11,139 @@
 
 # Check for 3 files in any order
 if [ "$#" -ne 3 ]; then
-    echo "Usage: $0 first_file.tsv second_file.tsv third_file.tsv" >&2
+    echo "Usage: $0 file_no_1.tsv file_no_2.tsv file_no_3.tsv" >&2
     exit 1
 fi
+
+# Check if the file is tsv and the related is consistent
+check_the_files_tsv() {
+    name_of_file=$1
+
+    # Verifying if it is TSV
+    if ! head -n 1 "$name_of_file" | grep -q $'\t'; then
+        echo "File $name_of_file is not tab-separated.Please provide TSV file."
+        exit 1
+    fi
+
+    # Checking if it is the same number of fields
+    number_of_fields=$(head -n1 "$name_of_file" | awk -F'\t' '{print NF}')
+    awk -F '\t' -v fields="$number_of_fields" '
+        NR > 1 && NF != fields { print FILENAME ": line " NR " has " NF " fields instead of " fields }
+    ' "$name_of_file"
+}
+
+# looping each files
+for tsv_file in "$@"; do
+    check_the_files_tsv "$tsv_file"
+done
+
+# Merging of the 3 TSV files
+merging_of_the_files() {
+    awk -F'\t' 'NR==FNR { file1_data[$1 FS $3] = $0; next } { key = $1 FS $3; print $0, file1_data[key] }' "$1" "$2" | \
+    awk -F'\t' 'NR==FNR { file2_data[$1 FS $3] = $0; next } { key = $1 FS $3; print $0, file2_data[key] }' "$3" -
+}
+
+# Removal of the extra/unwanted column
+Column_removal() {
+    awk -F'\t' '
+    BEGIN { OFS=FS }
+    NR==1 {
+        column_count = 0
+        for (i = 1; i <= NF; i++) {
+            if (tolower($i) != "continent") {
+                column_indices[++column_count] = i
+            }
+        }
+    }
+    {
+        for (i = 1; i <= column_count; i++) {
+            printf "%s%s", $column_indices[i], (i == column_count ? ORS : OFS)
+        }
+    }' "$1"
+}
+
+# Function to filter the column
+filter_column() {
+    awk -F'\t' '
+    BEGIN { OFS=FS }
+    NR == 1 {
+        for (i = 1; i <= NF; i++) {
+            if (tolower($i) == "code") {
+                column = i
+                break
+            }
+        }
+        print
+    }
+    $column != "" {
+        print
+    }' "$1"
+}
+
+
+# Function to filter the years particularly from 2011 to 2021
+filter_out_by_year_range() {
+    awk -F'\t' '
+    BEGIN { OFS=FS }
+    NR == 1 {
+        for (i = 1; i <= NF; i++) {
+            if (tolower($i) == "year") {
+                year_col = i
+                break
+            }
+        }
+        print
+    }
+    {
+        if ($year_col >= 2011 && $year_col <= 2021) {
+            print
+        }
+    }' "$1"
+}
+
+
+# Sorting appropriate columns
+sorting_data_columns() {
+    awk -F'\t' 'NR==1 { print; next } { print $0 | "sort -t$'\''\t'\'' -k1,1 -k3,3" }'
+}
+
+# Rearranging the columns for final file
+reorder_columns() {
+    awk -F'\t' '
+    BEGIN { OFS=FS }
+    NR == 1 {
+        for (i = 1; i <= NF; i++) {
+            column_name = tolower($i)
+            if (column_name == "year") { order_columns[3] = i }
+            else if (column_name == "entity" || column_name == "country") { order_columns[1] = i }
+            else if (column_name == "code") { order_columns[2] = i }
+            else if (index(column_name, "gdp per capita") > 0) { order_columns[4] = i }
+            else if (index(column_name, "population") > 0) { order_columns[5] = i }
+            else if (index(column_name, "homicide rate") > 0) { order_columns[6] = i }
+            else if (index(column_name, "life expectancy") > 0) { order_columns[7] = i }
+            else if (column_name == "cantril ladder score") { order_columns[8] = i }
+        }
+    }
+    {
+        for (i = 1; i <= 8; i++) {
+            if (order_columns[i] != "") {
+                printf "%s%s", $ordorder_columnser[i], (i == 8 ? ORS : OFS)
+            }
+        }
+    }' "$1"
+}
+
+
+# Function calling and further process of the data
+#Joined_final_data=$(merging_of_the_files "$1" "$2" "$3")
+#new_data=$(echo "$Joined_final_data" | Column_removal)
+#Filtered_column=$(echo "$new_data" | filter_column)
+#Filtered_year=$(echo "$Filtered_column" | filter_out_by_year_range)
+#Data_sorting=$(echo "$Filtered_year" | sorting_data_columns)
+#Last_data=$(echo "$Data_sorting=$(echo "$Filtered_year" | sort_data)
+#" | reorder_columns)
+
+Last_data=$(merging_of_the_files "$1" "$2" "$3" | \ Column_removal | \ filter_column | \ filter_out_by_year_range | \ sorting_data_columns | \ reorder_columns)
+
+# Saving it to a new file
+echo "$Last_data" > cleaned_data.tsv
