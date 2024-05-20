@@ -1,2 +1,95 @@
+# This script is the second part of the first script where the final file is fed into this script and we calculate the correlation between the Cantril ladder and homicide rate, GDP, population, and life expectancy.
+# By - Mallikarjuna Vittalapura Ravi
+# Student Id - 24371476
+# Last Modified - 20/05/2024
+
 #!/bin/bash
 
+# Check for one argument
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 file.tsv" >&2
+    exit 1
+fi
+
+file="$1"
+
+# Calculate correlations between Cantril ladder and different factors
+processed_data=$(awk -F"\t" '
+{
+    if ($8 > 0) {
+        population_sum_product[$1] += $5 * $8;
+        population_sum_x[$1] += $5;
+        population_sum_x_squared[$1] += $5 * $5;
+
+        homicide_sum_product[$1] += $6 * $8;
+        homicide_sum_x[$1] += $6;
+        homicide_sum_x_squared[$1] += $6 * $6;
+
+        cantril_sum_squared[$1] += $8 * $8;
+        cantril_sum[$1] += $8;
+
+        life_expectancy_sum_product[$1] += $7 * $8;
+        life_expectancy_sum_x[$1] += $7;
+        life_expectancy_sum_x_squared[$1] += $7 * $7;
+
+        gdp_sum_product[$1] += $4 * $8;
+        gdp_sum_x[$1] += $4;
+        gdp_sum_x_squared[$1] += $4 * $4;
+
+        count_records[$1]++;
+    }
+}
+END {
+    for (i in count_records) {
+        if (count_records[i] > 3) {
+            homicide_correlation[i] = compute_corr(count_records[i], homicide_sum_product[i], homicide_sum_x[i], homicide_sum_x_squared[i], cantril_sum[i], cantril_sum_squared[i]);
+            life_expectancy_correlation[i] = compute_corr(count_records[i], life_expectancy_sum_product[i], life_expectancy_sum_x[i], life_expectancy_sum_x_squared[i], cantril_sum[i], cantril_sum_squared[i]);
+            gdp_correlation[i] = compute_corr(count_records[i], gdp_sum_product[i], gdp_sum_x[i], gdp_sum_x_squared[i], cantril_sum[i], cantril_sum_squared[i]);
+            population_correlation[i] = compute_corr(count_records[i], population_sum_product[i], population_sum_x[i], population_sum_x_squared[i], cantril_sum[i], cantril_sum_squared[i]);
+
+            homicide_avg_correlation += homicide_correlation[i];
+            life_expectancy_avg_correlation += life_expectancy_correlation[i];
+            gdp_avg_correlation += gdp_correlation[i];
+            population_avg_correlation += population_correlation[i];
+            count_avg++;
+        }
+    }
+
+    homicide_avg_correlation /= count_avg;
+    life_expectancy_avg_correlation /= count_avg;
+    gdp_avg_correlation /= count_avg;
+    population_avg_correlation /= count_avg;
+
+    highest_corr = homicide_avg_correlation;
+    highest_name = "Homicide Rate";
+    
+    if (abs_val(life_expectancy_avg_correlation) > abs_val(highest_corr)) {
+        highest_corr = life_expectancy_avg_correlation;
+        highest_name = "Life Expectancy";
+    }
+    if (abs_val(gdp_avg_correlation) > abs_val(highest_corr)) {
+        highest_corr = gdp_avg_correlation;
+        highest_name = "GDP";
+    }
+    if (abs_val(population_avg_correlation) > abs_val(highest_corr)) {
+        highest_corr = population_avg_correlation;
+        highest_name = "Population";
+    }
+
+    printf "Mean correlation of Homicide Rate with Cantril ladder is %.3f\n", homicide_avg_correlation;
+    printf "Mean correlation of GDP with Cantril ladder is %.3f\n", gdp_avg_correlation;
+    printf "Mean correlation of Population with Cantril ladder is %.3f\n", population_avg_correlation;
+    printf "Mean correlation of Life Expectancy with Cantril ladder is %.3f\n", life_expectancy_avg_correlation;
+    printf "Most predictive mean correlation with the Cantril ladder is %s (r = %.3f)\n", highest_name, highest_corr;
+}
+function compute_corr(n, sum_xy, sum_x, sum_x_squared, sum_y, sum_y_squared) {
+    denominator = sqrt((n * sum_x_squared - sum_x * sum_x) * (n * sum_y_squared - sum_y * sum_y));
+    return denominator ? (n * sum_xy - sum_x * sum_y) / denominator : 0;
+}
+function abs_val(x) {
+    return x < 0 ? -x : x;
+}
+' "$file")
+
+# Print the result
+echo "$processed_data"
