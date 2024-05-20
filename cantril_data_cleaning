@@ -33,33 +33,42 @@ check_the_files_tsv() {
 }
 
 # looping each files
-for tsv_file in "$@"; do
+for tsv_file in "$1" "$2" "$3"; do
     check_the_files_tsv "$tsv_file"
 done
 
 # Merging of the 3 TSV files
 merging_of_the_files() {
-    awk -F'\t' 'NR==FNR { file1_data[$1 FS $3] = $0; next } { key = $1 FS $3; print $0, file1_data[key] }' "$1" "$2" | \
-    awk -F'\t' 'NR==FNR { file2_data[$1 FS $3] = $0; next } { key = $1 FS $3; print $0, file2_data[key] }' "$3" -
+    awk 'BEGIN { FS=OFS="\t" }
+    NR==FNR { data[$1,$3] = substr($0, index($0,$3)); next }
+    { print $0, data[$1,$3] }' "$1" "$2" | \
+    awk 'BEGIN { FS=OFS="\t" }
+    NR==FNR { data[$1,$3] = substr($0, index($0,$3)); next }
+    { print $0, data[$1,$3] }' "$3" -
 }
 
 # Removal of the extra/unwanted column
 Column_removal() {
     awk -F'\t' '
-    BEGIN { OFS=FS }
+    BEGIN { 
+        OFS=FS 
+    }
     NR==1 {
         column_count = 0
-        for (i = 1; i <= NF; i++) {
-            if (tolower($i) != "continent") {
-                column_indices[++column_count] = i
+        for (h = 1; h <= NF; h++) {
+            if (tolower($i) == "continent") {
+                the_column = h
+            } else {
+                column_indices[++column_count] = h
             }
+            
         }
     }
     {
-        for (i = 1; i <= column_count; i++) {
-            printf "%s%s", $column_indices[i], (i == column_count ? ORS : OFS)
+        for (k = 1; k <= column_count; k++) {
+            printf "%s%s", $column_indices[k], (k == column_count ? ORS : OFS)
         }
-    }' "$1"
+    }' 
 }
 
 # Function to filter the column
@@ -70,41 +79,33 @@ filter_column() {
         for (i = 1; i <= NF; i++) {
             if (tolower($i) == "code") {
                 column = i
-                break
             }
         }
         print
     }
-    $column != "" {
-        print
-    }' "$1"
+    $column != ""'
 }
 
 
 # Function to filter the years particularly from 2011 to 2021
 filter_out_by_year_range() {
     awk -F'\t' '
-    BEGIN { OFS=FS }
-    NR == 1 {
+    BEGIN { OFS = FS }
+    NR==1 {
         for (i = 1; i <= NF; i++) {
             if (tolower($i) == "year") {
-                year_col = i
-                break
+                column = i
             }
         }
         print
     }
-    {
-        if ($year_col >= 2011 && $year_col <= 2021) {
-            print
-        }
-    }' "$1"
+    $column >= 2011 && $column <= 2021'
 }
 
 
 # Sorting appropriate columns
 sorting_data_columns() {
-    awk -F'\t' 'NR==1 { print; next } { print $0 | "sort -t$'\''\t'\'' -k1,1 -k3,3" }'
+    awk -F'\t' 'NR==1 { print; next } { print $0 | "sort -k1,1 -k3,3" }'
 }
 
 # Rearranging the columns for final file
@@ -117,33 +118,37 @@ reorder_columns() {
             if (column_name == "year") { order_columns[3] = i }
             else if (column_name == "entity" || column_name == "country") { order_columns[1] = i }
             else if (column_name == "code") { order_columns[2] = i }
-            else if (index(column_name, "gdp per capita") > 0) { order_columns[4] = i }
-            else if (index(column_name, "population") > 0) { order_columns[5] = i }
-            else if (index(column_name, "homicide rate") > 0) { order_columns[6] = i }
-            else if (index(column_name, "life expectancy") > 0) { order_columns[7] = i }
+            else if (index(column_name, "\"gdp per capita, ppp (constant 2017 international $)\"") > 0) { order_columns[4] = i }
+            else if (column_name == "population (historical estimates)") { order_columns[5] = i }
+            else if (column_name == "\"homicide rate per 100,000 population - both sexes - all ages\"") { order_columns[6] = i }
+            else if (index(column_name, "life expectancy - sex: all - age: at birth - variant: estimates") > 0) { order_columns[7] = i }
             else if (column_name == "cantril ladder score") { order_columns[8] = i }
         }
     }
     {
         for (i = 1; i <= 8; i++) {
             if (order_columns[i] != "") {
-                printf "%s%s", $ordorder_columnser[i], (i == 8 ? ORS : OFS)
+                printf "%s\t", $order_columns[i]
+            }
+            if (i == 8) {
+                printf "\n"
             }
         }
-    }' "$1"
+    }'
 }
 
 
 # Function calling and further process of the data
-#Joined_final_data=$(merging_of_the_files "$1" "$2" "$3")
-#new_data=$(echo "$Joined_final_data" | Column_removal)
-#Filtered_column=$(echo "$new_data" | filter_column)
-#Filtered_year=$(echo "$Filtered_column" | filter_out_by_year_range)
-#Data_sorting=$(echo "$Filtered_year" | sorting_data_columns)
-#Last_data=$(echo "$Data_sorting=$(echo "$Filtered_year" | sort_data)
-#" | reorder_columns)
+Joined_final_data=$(merging_of_the_files "$1" "$2" "$3")
+new_data=$(echo "$Joined_final_data" | Column_removal)
+Filtered_column=$(echo "$new_data" | filter_column)
+Filtered_year=$(echo "$Filtered_column" | filter_out_by_year_range)
+Data_sorting=$(echo "$Filtered_year" | sorting_data_columns)
+Last_data=$(echo "$Data_sorting" | reorder_columns)
 
-Last_data=$(merging_of_the_files "$1" "$2" "$3" | \ Column_removal | \ filter_column | \ filter_out_by_year_range | \ sorting_data_columns | \ reorder_columns)
+#Last_data=$(merging_of_the_files "$1" "$2" "$3" | \ Column_removal | \ filter_column | \ filter_out_by_year_range | \ sorting_data_columns | \ reorder_columns)
 
 # Saving it to a new file
 echo "$Last_data" > cleaned_data.tsv
+
+
