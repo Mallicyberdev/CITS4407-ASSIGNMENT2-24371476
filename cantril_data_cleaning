@@ -1,2 +1,16 @@
+# The given script is used to clean the three TSV files and merge it to give a cleaned tsv file.
+# Initially, it ensures the correct number of arguments are provided and verifies that the files are indeed TSV formatted, with a consistent number of fields per row. 
+# Following validation, the script merges the files based on specified columns. It proceeds to exclude the 'continent' column, selectively retains rows based on the 'code' column and the 'year' column, sorts the data, and finally rearranges the columns into a predefined order.
+# The resultant data, after being cleaned is merged, and sorted, and  is saved into a file named 'cleaned_data.tsv' file
+# By - Mallikarjuna Vittalapura Ravi
+# Student Id - 24371476
+# Last Modified - 20/05/2024
+
+
 #!/bin/bash
 
+# Check for 3 files in any order
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 first_file.tsv second_file.tsv third_file.tsv" >&2
+    exit 1
+fi
